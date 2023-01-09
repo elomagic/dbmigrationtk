@@ -303,8 +303,13 @@ public class SqlAnyHybridImporter implements SqlAnyImporter {
             String comment = matcher.group("comment");
             LOGGER.trace("Getting comment of column {}.{}", tableName, columnName);
 
-            DbColumn column = system.tables.get(tableName).columns.get(columnName);
-            column.comment = comment;
+            try {
+                DbColumn column = system.tables.get(tableName).columns.get(columnName);
+                column.comment = comment;
+            } catch (Exception ex) {
+                LOGGER.error("Unable to process comment of table name '{}' with column name '{}'", tableName, columnName);
+                throw ex;
+            }
         }
     }
 
