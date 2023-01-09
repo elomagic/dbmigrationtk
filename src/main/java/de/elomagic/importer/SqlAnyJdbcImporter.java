@@ -51,9 +51,9 @@ import java.util.concurrent.ForkJoinPool;
  * - DBSpaces
  * - Users / Roles
  */
-public class JdbcSqlAnyImporter implements SqlAnyImporter {
+public class SqlAnyJdbcImporter implements SqlAnyImporter {
 
-    private static final Logger LOGGER = LogManager.getLogger(JdbcSqlAnyImporter.class);
+    private static final Logger LOGGER = LogManager.getLogger(SqlAnyJdbcImporter.class);
 
     @Override
     @NotNull
@@ -368,6 +368,7 @@ public class JdbcSqlAnyImporter implements SqlAnyImporter {
         }
     }
 
+    @NotNull
     private PreparedStatement createPrepareStatement(@NotNull Connection con, @NotNull String sql, @NotNull List values) throws SQLException {
         PreparedStatement statement = con.prepareStatement(sql, ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY);
 

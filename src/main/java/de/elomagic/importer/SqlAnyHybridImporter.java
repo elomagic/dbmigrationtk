@@ -16,22 +16,37 @@ import org.apache.commons.lang3.tuple.Pair;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
+import java.io.BufferedWriter;
 import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HexFormat;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ForkJoinPool;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 /**
+ *
  * Open issue
  * - Table export includes different, non documented value formats
  *
@@ -50,9 +65,9 @@ import java.util.stream.Stream;
  * - DBSpaces
  * - Users / Roles
  */
-public class ReloadV2SqlImporter implements SqlAnyImporter {
+public class SqlAnyHybridImporter implements SqlAnyImporter {
 
-    private static final Logger LOGGER = LogManager.getLogger(ReloadV2SqlImporter.class);
+    private static final Logger LOGGER = LogManager.getLogger(SqlAnyHybridImporter.class);
 
     // (-{49}\n--\s{3}.*?\n-{49}\n)?(^.*?go\n\n)
     static final String REGEX_GO_SECTIONS = "(^\\w.*?go\\n\\n)";
@@ -155,7 +170,9 @@ public class ReloadV2SqlImporter implements SqlAnyImporter {
 
             LOGGER.debug("Length of reload script: {} chars", reloadScript.length());
 
-            streamGoSections(reloadScript).forEach(s -> processSection(s, system));
+            try (Connection con = createConnection()) {
+                streamGoSections(reloadScript).forEach(s -> processSection(s, system, con));
+            }
 
             return system;
         } catch (Exception ex) {
@@ -181,7 +198,7 @@ public class ReloadV2SqlImporter implements SqlAnyImporter {
         return gos.stream();
     }
 
-    private void processSection(@NotNull String section, @NotNull DbSystem system) {
+    private void processSection(@NotNull String section, @NotNull DbSystem system, @NotNull Connection con) {
         if (PATTERN_TABLE_NAME.matcher(section).find()) {
             processCreateTable(section, system);
         } else if (PATTERN_COLUMN_COMMENT.matcher(section).find()) {
@@ -197,7 +214,7 @@ public class ReloadV2SqlImporter implements SqlAnyImporter {
         } else if (PATTERN_COMMENT_INDEX.matcher(section).find()) {
             processIndexComment(section, system);
         } else if (PATTERN_LOAD_TABLE.matcher(section).find()) {
-            processLoadTable(section, system);
+            processLoadTable(section, system, con);
         } else if (PATTERN_RESET_IDENTITY.matcher(section).find()) {
             processResetIdentity(section, system);
         } else {
@@ -364,22 +381,12 @@ public class ReloadV2SqlImporter implements SqlAnyImporter {
         }
     }
 
-    private void processLoadTable(@NotNull String section, @NotNull DbSystem system) {
+    private void processLoadTable(@NotNull String section, @NotNull DbSystem system, @NotNull Connection con) {
         Matcher matcher = PATTERN_LOAD_TABLE.matcher(section);
         if (matcher.find()) {
             String tableName = matcher.group("tn");
-            List<String> columnNames = Arrays
-                    .stream(matcher.group("cols").split(","))
-                    .map(c -> c.replace("\"", ""))
-                    .toList();
-            Path file = Paths.get(matcher.group("file"));
             try {
-                LOGGER.trace("Processing load content SQL from database table {}", tableName);
-                DbTableContent content = new DbTableContent();
-                content.file = file;
-                content.columns.addAll(columnNames);
-
-                system.tables.get(tableName).content = content;
+                unloadTable(system.tables.get(tableName), con);
             } catch (Exception ex) {
                 LOGGER.error("Unable to parse load table '{}'", tableName);
                 throw ex;
@@ -442,6 +449,138 @@ public class ReloadV2SqlImporter implements SqlAnyImporter {
     private Optional<String> findPrimaryKey(@NotNull String createTable) {
         Matcher m1 = PATTERN_TABLE_PK.matcher(createTable);
         return m1.find() ? Optional.ofNullable(m1.group(1)) : Optional.empty();
+    }
+
+    private void unloadTables(@NotNull DbSystem system, @NotNull Connection con) throws ExecutionException, InterruptedException {
+        String filter = Configuration.getString(Configuration.TARGET_OUTPUT_TABLER_FILTER);
+        List<String> filterTableNames = filter == null ? List.of() : List.of(filter.split(","));
+
+        ForkJoinPool customThreadPool = new ForkJoinPool(20);
+        customThreadPool.submit(() ->
+                system.tables
+                        .values()
+                        .parallelStream()
+                        .filter(t -> filterTableNames.isEmpty() || filterTableNames.contains(t.name))
+                        .forEach(t -> unloadTable(t, con))).get();
+    }
+
+    private void unloadTable(@NotNull DbTable table, @NotNull Connection con) {
+        try {
+            Path file = Path.of(
+                    Configuration.getString(Configuration.TARGET_OUTPUT_PATH),
+                    "unloaded",
+                    table.name + ".dat");
+
+            LOGGER.info("Unloading table data '{}' into '{}'", table.name, file);
+
+            table.content = new DbTableContent();
+            table.content.file = file;
+            table.content.encoding = Charset.forName(Configuration.getString(Configuration.SOURCE_ENCODING));
+            table.content.columns.addAll(
+                    table.columns
+                            .values()
+                            .stream()
+                            .sorted(Comparator.comparing(DbColumn::getIndex))
+                            .map(c -> c.name).toList());
+
+            Files.createDirectories(table.content.file.getParent());
+
+            Map<Integer, DbColumn> indexedColumns = new HashMap<>();
+            table.columns.values().forEach(c -> indexedColumns.put(c.index, c));
+
+            try (BufferedWriter writer = Files.newBufferedWriter(file, table.content.encoding)) {
+                String sql = "SELECT %s FROM \"%s\"".formatted(
+                        String.join(",", table.content.columns),
+                        table.name
+                );
+
+                try (PreparedStatement stmt = createPrepareStatement(con, sql, List.of())) {
+                    ResultSet rs = stmt.executeQuery();
+                    while (rs.next()) {
+                        int columnCount = rs.getMetaData().getColumnCount();
+                        List<String> buffer = new ArrayList<>();
+
+                        // LOGGER.debug("Column count {}. DBColumn.count={}", columnCount, table.columns.size());
+                        for (int i = 0; i < columnCount; i++) {
+                            int index = i + 1;
+                            DbColumn column = indexedColumns.get(index);
+
+                            String value = rs.getString(index);
+
+                            if (value == null) {
+                                value = Configuration.getString(Configuration.TARGET_OUTPUT_VALUE_NULL);
+
+                                if (!column.nullable) {
+                                    LOGGER.warn("Value of source database table '{}', column '{}' is NULL but must be NOT NULL by schema definition", table.name, column.name);
+                                }
+                            } else {
+                                value = normalizeValue(value);
+                                value = wrapConditionalValue(value, column);
+                            }
+
+                            buffer.add(value);
+                        }
+
+                        writer.write(String.join(",", buffer));
+                        writer.write("\n");
+                    }
+                }
+            }
+        } catch (Exception ex) {
+            LOGGER.error(ex.getMessage(), ex);
+            throw new AppRuntimeException(ex.getMessage(), ex);
+        }
+    }
+
+    @Nullable
+    private String wrapConditionalValue(@Nullable String value, @NotNull DbColumn column) {
+        if (value == null) {
+            return null;
+        }
+
+        // TODO Support any datatype
+        return switch (column.datatype) {
+            case CHAR, VARCHAR, LONG_VARCHAR -> "\"" + value + "\"";
+            case INTEGER, NUMERIC, SMALLINT, BIGINT, TINYINT -> value;
+            // TODO Check date time format
+            case TIMESTAMP -> value;
+            case LONG_BINARY -> "x" + HexFormat.of().formatHex(value.getBytes(StandardCharsets.UTF_8));
+            default -> throw new AppRuntimeException("Datatype " + column.datatype + " currently not support yet.");
+        };
+    }
+
+    @NotNull
+    private String normalizeValue(@NotNull String value) {
+        return value
+                .replace("\\", "\\\\")
+                .replace("\u0000", "")
+                .replace("\"", "\\\"")
+                .replace("\n", "\\n")
+                .replace(",", "\\,")
+                .replace("\r", "\\r");
+    }
+
+    @NotNull
+    Connection createConnection() throws SQLException {
+        String url = Configuration.getString(Configuration.SOURCE_DATABASE_URL);
+
+        LOGGER.info("Connecting to database '{}'", url);
+
+        return DriverManager.getConnection(
+                url,
+                Configuration.getString(Configuration.SOURCE_USERNAME),
+                Configuration.getString(Configuration.SOURCE_PASSWORD));
+    }
+
+    @NotNull
+    private PreparedStatement createPrepareStatement(@NotNull Connection con, @NotNull String sql, @NotNull List values) throws SQLException {
+        PreparedStatement statement = con.prepareStatement(sql, ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY);
+
+        for (int i = 0; i < values.size(); i++) {
+            statement.setString(i+1, String.valueOf(values.get(i)));
+        }
+
+        return statement;
     }
 
 }

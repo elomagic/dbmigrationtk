@@ -36,7 +36,7 @@ Prototype of an toolkit for translating SQLAnywhere "reload" SQL script into Pos
     # Encoding of the reload script and table content files.
     de.elomagic.dbtk.source.encoding=UTF-8
     # Translator class (Currently, the JdbcSqlAnyImporter is recommended)
-    de.elomagic.dbtk.source.translator=de.elomagic.importer.ReloadV2SqlImporter
+    de.elomagic.dbtk.source.translator=de.elomagic.importer.SqlAnyReloadV2Importer
     
     # Name of the target database
     de.elomagic.dbtk.target.databaseName=MigratedDatabase
