@@ -271,6 +271,16 @@ public class JdbcSqlAnyImporter implements SqlAnyImporter {
                     WHERE u.user_name in ('dba') AND index_category = 2
                 """.replace("\n", " ");
 
+        /*
+         * SELECT u.user_name, p.table_name AS p_table_name, fi.index_name AS fk_name, f.table_name AS fk_table_name, * FROM sysfkey as fk
+         *     JOIN systab AS f ON f.table_id = fk.primary_table_id
+         *     JOIN sysuser AS u ON f.creator = u.user_id
+         *     JOIN sysidx AS fi ON fk.foreign_table_id = fi.table_id AND fk.foreign_index_id = fi.index_id
+         *     JOIN systab AS p ON p.table_id = fk.foreign_table_id
+         *     WHERE u.user_name in ('dba') AND fi.index_category = 2 AND p_table_name = 'UNT_AN'
+         *     ORDER BY u.user_name, fk_table_name, fk_name
+         */
+
         LOGGER.info("Reading database foreign keys");
 
         try (PreparedStatement statement = createPrepareStatement(con, sql, List.of()); ResultSet rs = statement.executeQuery()) {
