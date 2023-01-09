@@ -264,33 +264,57 @@ public class JdbcSqlAnyImporter implements SqlAnyImporter {
     }
 
     void importForeignKeys(@NotNull DbSystem system, @NotNull Connection con) throws SQLException {
-        String sql = """
-                SELECT index_name, table_name, user_name FROM sysidx AS i
-                    JOIN systab AS t ON i.table_id = t.table_id
-                    JOIN sysuser AS u ON t.creator = u.user_id
-                    WHERE u.user_name in ('dba') AND index_category = 2
-                """.replace("\n", " ");
-
         /*
-         * SELECT u.user_name, p.table_name AS p_table_name, fi.index_name AS fk_name, f.table_name AS fk_table_name, * FROM sysfkey as fk
-         *     JOIN systab AS f ON f.table_id = fk.primary_table_id
-         *     JOIN sysuser AS u ON f.creator = u.user_id
-         *     JOIN sysidx AS fi ON fk.foreign_table_id = fi.table_id AND fk.foreign_index_id = fi.index_id
-         *     JOIN systab AS p ON p.table_id = fk.foreign_table_id
-         *     WHERE u.user_name in ('dba') AND fi.index_category = 2 AND p_table_name = 'UNT_AN'
-         *     ORDER BY u.user_name, fk_table_name, fk_name
+         String sql = """
+         SELECT index_name, table_name, user_name FROM sysidx AS i
+         JOIN systab AS t ON i.table_id = t.table_id
+         JOIN sysuser AS u ON t.creator = u.user_id
+         WHERE u.user_name in ('dba') AND index_category = 2
+         """.replace("\n", " ");
          */
+
+        String sql = """              
+                SELECT u.user_name, p.table_name AS p_table_name, fi.index_name AS fk_name, f.table_name AS fk_table_name, LIST(pcc.column_name || ' ' || pic."order") AS p_cols, LIST(fcc.column_name || ' ' || fic."order") AS f_cols FROM sysfkey AS fk
+                    JOIN systab AS f ON f.table_id = fk.primary_table_id
+                    JOIN sysuser AS u ON f.creator = u.user_id
+                    JOIN sysidx AS fi ON fk.foreign_table_id = fi.table_id AND fk.foreign_index_id = fi.index_id
+                    JOIN systab AS p ON p.table_id = fk.foreign_table_id
+                    JOIN sysidxcol AS pic ON pic.table_id = fk.foreign_table_id AND pic.index_id = fk.foreign_index_id
+                    JOIN systabcol AS pcc ON pcc.table_id = pic.table_id AND pcc.column_id = pic.column_id                
+                    JOIN sysidxcol AS fic ON fic.table_id = fk.primary_table_id AND fic.index_id = fk.primary_index_id
+                    JOIN systabcol AS fcc ON fcc.table_id = fic.table_id AND fcc.column_id = fic.column_id                
+                    WHERE u.user_name in ('dba') AND fi.index_category = 2
+                    GROUP BY u.user_name, p_table_name, fk_table_name, fk_name
+                    ORDER BY u.user_name, fk_table_name, fk_name
+                """.replace("\n", " ");
 
         LOGGER.info("Reading database foreign keys");
 
         try (PreparedStatement statement = createPrepareStatement(con, sql, List.of()); ResultSet rs = statement.executeQuery()) {
             while (rs.next()) {
                 DbForeignKey fk = new DbForeignKey();
-                fk.fkName = rs.getString("index_name");
+                fk.fkName = rs.getString("fk_name");
                 fk.owner = rs.getString("user_name");
-                fk.tableName = rs.getString("table_name");
+                fk.tableName = rs.getString("p_table_name");
+                fk.referenceTable = rs.getString("fk_table_name");
 
-                // TODO get fk columns and ref columns
+                String pcols = rs.getString("p_cols");
+                List<Pair<String, Boolean>> columnNames = Arrays
+                        .stream(pcols.split(","))
+                        .map(c -> c.replace("\"", "").trim())
+                        .map(c -> Pair.of(c.split(" ")[0].trim(), c.endsWith(" D")))
+                        .toList();
+                fk.fkColumns = columnNames;
+
+                String fcols = rs.getString("f_cols");
+                List<String> fcolumnNames = Arrays
+                        .stream(fcols.split(","))
+                        .map(c -> c.replace("\"", "").trim())
+                        //.map(c -> Pair.of(c.split(" ")[0].trim(), c.endsWith(" D")))
+                        .toList();
+                fk.referenceColumns = fcolumnNames;
+
+                // TODO match mode and cascade. Looks that database handles "cascade" with triggers
 
                 system.foreignKeys.add(fk);
             }
