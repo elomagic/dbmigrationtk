@@ -434,7 +434,7 @@ public class PostgresLoader implements SchemaLoader {
          * character.
          */
         return switch (column.datatype) {
-            case BINARY, LONG_BINARY -> ("\\x" + HexFormat.of().formatHex(rawValue.getBytes(StandardCharsets.UTF_8)));
+            case BINARY, LONG_BINARY -> ("\\\\x" + HexFormat.of().formatHex(rawValue.getBytes(StandardCharsets.UTF_8)));
             case INTEGER, NUMERIC, SMALLINT, BIGINT, TINYINT -> rawValue;
             default -> rawValue
                     .replace("\\", "\\\\")
