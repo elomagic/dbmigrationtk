@@ -2,6 +2,7 @@ package de.elomagic.importer;
 
 import de.elomagic.AppRuntimeException;
 import de.elomagic.Configuration;
+import de.elomagic.DbUtils;
 import de.elomagic.dto.DbColumn;
 import de.elomagic.dto.DbIndex;
 import de.elomagic.dto.DbIndexComment;
@@ -25,10 +26,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.sql.Connection;
-import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
-import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
@@ -170,7 +169,7 @@ public class SqlAnyHybridImporter implements SqlAnyImporter {
 
             LOGGER.debug("Length of reload script: {} chars", reloadScript.length());
 
-            try (Connection con = createConnection()) {
+            try (Connection con = DbUtils.createConnection()) {
                 streamGoSections(reloadScript).forEach(s -> processSection(s, system, con));
             }
 
@@ -499,7 +498,7 @@ public class SqlAnyHybridImporter implements SqlAnyImporter {
                         table.name
                 );
 
-                try (PreparedStatement stmt = createPrepareStatement(con, sql, List.of())) {
+                try (PreparedStatement stmt = DbUtils.createPrepareStatement(con, sql, List.of())) {
                     ResultSet rs = stmt.executeQuery();
                     while (rs.next()) {
                         int columnCount = rs.getMetaData().getColumnCount();
@@ -563,29 +562,6 @@ public class SqlAnyHybridImporter implements SqlAnyImporter {
                 .replace("\n", "\\n")
                 .replace(",", "\\,")
                 .replace("\r", "\\r");
-    }
-
-    @NotNull
-    Connection createConnection() throws SQLException {
-        String url = Configuration.getString(Configuration.SOURCE_DATABASE_URL);
-
-        LOGGER.info("Connecting to database '{}'", url);
-
-        return DriverManager.getConnection(
-                url,
-                Configuration.getString(Configuration.SOURCE_USERNAME),
-                Configuration.getString(Configuration.SOURCE_PASSWORD));
-    }
-
-    @NotNull
-    private PreparedStatement createPrepareStatement(@NotNull Connection con, @NotNull String sql, @NotNull List values) throws SQLException {
-        PreparedStatement statement = con.prepareStatement(sql, ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY);
-
-        for (int i = 0; i < values.size(); i++) {
-            statement.setString(i+1, String.valueOf(values.get(i)));
-        }
-
-        return statement;
     }
 
 }

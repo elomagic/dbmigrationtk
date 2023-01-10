@@ -2,6 +2,7 @@ package de.elomagic.importer;
 
 import de.elomagic.AppRuntimeException;
 import de.elomagic.Configuration;
+import de.elomagic.DbUtils;
 import de.elomagic.dto.DbColumn;
 import de.elomagic.dto.DbForeignKey;
 import de.elomagic.dto.DbIndex;
@@ -23,7 +24,6 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.Connection;
-import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -60,7 +60,7 @@ public class SqlAnyJdbcImporter implements SqlAnyImporter {
     public DbSystem importDatabase(String[] args) throws AppRuntimeException {
         DbSystem system = new DbSystem();
 
-        try (Connection con = createConnection()) {
+        try (Connection con = DbUtils.createConnection()) {
             LOGGER.info(("Importing database schema"));
             importTables(system, con);
             importColumns(system, con);
@@ -78,18 +78,6 @@ public class SqlAnyJdbcImporter implements SqlAnyImporter {
         return system;
     }
 
-    @NotNull
-    Connection createConnection() throws SQLException {
-        String url = Configuration.getString(Configuration.SOURCE_DATABASE_URL);
-
-        LOGGER.info("Connecting to database '{}'", url);
-
-        return DriverManager.getConnection(
-                url,
-                Configuration.getString(Configuration.SOURCE_USERNAME),
-                Configuration.getString(Configuration.SOURCE_PASSWORD));
-    }
-
     void importTables(@NotNull DbSystem system, @NotNull Connection con) throws SQLException {
         String sql = """
                 SELECT u.user_name as creator_name, r.remarks AS remarks, t.* FROM systab AS t
@@ -102,7 +90,7 @@ public class SqlAnyJdbcImporter implements SqlAnyImporter {
 
         LOGGER.info("Reading database tables schema");
 
-        try (PreparedStatement statement = createPrepareStatement(con, sql, List.of()); ResultSet rs = statement.executeQuery()) {
+        try (PreparedStatement statement = DbUtils.createPrepareStatement(con, sql, List.of()); ResultSet rs = statement.executeQuery()) {
             while (rs.next()) {
                 DbTable table = new DbTable();
 
@@ -129,7 +117,7 @@ public class SqlAnyJdbcImporter implements SqlAnyImporter {
                     ORDER BY t.table_name, c.column_id
                 """.replace("\n", " ");
 
-        try (PreparedStatement statement = createPrepareStatement(con, sql, List.of()); ResultSet rs = statement.executeQuery()) {
+        try (PreparedStatement statement = DbUtils.createPrepareStatement(con, sql, List.of()); ResultSet rs = statement.executeQuery()) {
             while (rs.next()) {
                 String tableName = rs.getString("table_name");
                 DbTable table = system.tables.get(tableName);
@@ -197,7 +185,7 @@ public class SqlAnyJdbcImporter implements SqlAnyImporter {
                         table.name
                 );
 
-                try (PreparedStatement stmt = createPrepareStatement(con, sql, List.of())) {
+                try (PreparedStatement stmt = DbUtils.createPrepareStatement(con, sql, List.of())) {
                     ResultSet rs = stmt.executeQuery();
                     while (rs.next()) {
                         int columnCount = rs.getMetaData().getColumnCount();
@@ -290,7 +278,7 @@ public class SqlAnyJdbcImporter implements SqlAnyImporter {
 
         LOGGER.info("Reading database foreign keys");
 
-        try (PreparedStatement statement = createPrepareStatement(con, sql, List.of()); ResultSet rs = statement.executeQuery()) {
+        try (PreparedStatement statement = DbUtils.createPrepareStatement(con, sql, List.of()); ResultSet rs = statement.executeQuery()) {
             while (rs.next()) {
                 DbForeignKey fk = new DbForeignKey();
                 fk.fkName = rs.getString("fk_name");
@@ -336,7 +324,7 @@ public class SqlAnyJdbcImporter implements SqlAnyImporter {
 
         LOGGER.info("Reading database indexes");
 
-        try (PreparedStatement statement = createPrepareStatement(con, sql, List.of()); ResultSet rs = statement.executeQuery()) {
+        try (PreparedStatement statement = DbUtils.createPrepareStatement(con, sql, List.of()); ResultSet rs = statement.executeQuery()) {
             while (rs.next()) {
                 String cols = rs.getString("cols");
                 List<Pair<String, Boolean>> columnNames = Arrays
@@ -366,17 +354,6 @@ public class SqlAnyJdbcImporter implements SqlAnyImporter {
                 }
             }
         }
-    }
-
-    @NotNull
-    private PreparedStatement createPrepareStatement(@NotNull Connection con, @NotNull String sql, @NotNull List values) throws SQLException {
-        PreparedStatement statement = con.prepareStatement(sql, ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY);
-
-        for (int i = 0; i < values.size(); i++) {
-            statement.setString(i+1, String.valueOf(values.get(i)));
-        }
-
-        return statement;
     }
 
 }
