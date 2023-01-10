@@ -60,7 +60,7 @@ Prototype of an toolkit for translating SQLAnywhere "reload" SQL script into Pos
       Check and if required update path for database access and unload!
    
        ```powershell
-       dbunload -y -v -c "UID=dba;PWD=***;CHARSET=utf-8;DBF=C:\db\database.db" -ss -l -r "C:\projects\db\db-unloaded-example\reload.sql" -ii -up "C:\projects\db\db-unloaded-example\unload"
+       dbunload -y -v -c "UID=dba;PWD=***;CHARSET=utf-8;DBF=C:\db\database.db" -ss -l -r "C:\projects\db\db-unloaded-example\reload.sql" -up "C:\projects\db\db-unloaded-example\unload"
        ```
    2. By using JDBC unload
       In this case, the database table unload will also be done by step 2.

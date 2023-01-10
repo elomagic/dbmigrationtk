@@ -1,4 +1,4 @@
-package de.elomagic.importer;
+package de.elomagic.unloader;
 
 import de.elomagic.AppRuntimeException;
 import de.elomagic.Configuration;
@@ -11,17 +11,16 @@ import de.elomagic.dto.DbSystem;
 import de.elomagic.dto.DbTable;
 import de.elomagic.dto.DbTableConstraint;
 import de.elomagic.dto.DbTableContent;
+import de.elomagic.loader.SchemaLoader;
 
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
 
 import java.io.BufferedWriter;
 import java.nio.charset.Charset;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -31,14 +30,9 @@ import java.sql.ResultSet;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
-import java.util.HashMap;
-import java.util.HexFormat;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ForkJoinPool;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -64,9 +58,9 @@ import java.util.stream.Stream;
  * - DBSpaces
  * - Users / Roles
  */
-public class SqlAnyHybridImporter implements SqlAnyImporter {
+public class SqlAnyHybridUnloader implements SqlAnyUnloader {
 
-    private static final Logger LOGGER = LogManager.getLogger(SqlAnyHybridImporter.class);
+    private static final Logger LOGGER = LogManager.getLogger(SqlAnyHybridUnloader.class);
 
     // (-{49}\n--\s{3}.*?\n-{49}\n)?(^.*?go\n\n)
     static final String REGEX_GO_SECTIONS = "(^\\w.*?go\\n\\n)";
@@ -154,9 +148,9 @@ public class SqlAnyHybridImporter implements SqlAnyImporter {
 
     @Override
     @NotNull
-    public DbSystem importDatabase(String[] args) throws AppRuntimeException {
+    public DbSystem importDatabase(@NotNull SchemaLoader targetLoader) throws AppRuntimeException {
         try {
-            Path file = Paths.get(args.length != 0 ? args[0] : Configuration.getString(Configuration.SOURCE_FILE));
+            Path file = Paths.get(Configuration.getString(Configuration.SOURCE_FILE));
 
             DbSystem system = new DbSystem();
 
@@ -170,13 +164,13 @@ public class SqlAnyHybridImporter implements SqlAnyImporter {
             LOGGER.debug("Length of reload script: {} chars", reloadScript.length());
 
             try (Connection con = DbUtils.createConnection()) {
-                streamGoSections(reloadScript).forEach(s -> processSection(s, system, con));
+                streamGoSections(reloadScript).forEach(s -> processSection(s, system, con, targetLoader));
             }
 
             return system;
         } catch (Exception ex) {
             LOGGER.error(ex.getMessage(), ex);
-            throw new AppRuntimeException("args=" + Arrays.toString(args), ex);
+            throw new AppRuntimeException(ex.getMessage(), ex);
         }
     }
 
@@ -197,7 +191,7 @@ public class SqlAnyHybridImporter implements SqlAnyImporter {
         return gos.stream();
     }
 
-    private void processSection(@NotNull String section, @NotNull DbSystem system, @NotNull Connection con) {
+    private void processSection(@NotNull String section, @NotNull DbSystem system, @NotNull Connection con, @NotNull SchemaLoader targetLoader) {
         if (PATTERN_TABLE_NAME.matcher(section).find()) {
             processCreateTable(section, system);
         } else if (PATTERN_COLUMN_COMMENT.matcher(section).find()) {
@@ -213,7 +207,7 @@ public class SqlAnyHybridImporter implements SqlAnyImporter {
         } else if (PATTERN_COMMENT_INDEX.matcher(section).find()) {
             processIndexComment(section, system);
         } else if (PATTERN_LOAD_TABLE.matcher(section).find()) {
-            processLoadTable(section, system, con);
+            processLoadTable(section, system, con, targetLoader);
         } else if (PATTERN_RESET_IDENTITY.matcher(section).find()) {
             processResetIdentity(section, system);
         } else {
@@ -385,12 +379,17 @@ public class SqlAnyHybridImporter implements SqlAnyImporter {
         }
     }
 
-    private void processLoadTable(@NotNull String section, @NotNull DbSystem system, @NotNull Connection con) {
+    private void processLoadTable(@NotNull String section, @NotNull DbSystem system, @NotNull Connection con, @NotNull SchemaLoader targetLoader) {
+        String filter = Configuration.getString(Configuration.TARGET_OUTPUT_TABLER_FILTER);
+        List<String> filterTableNames = filter == null ? List.of() : List.of(filter.split(","));
+
         Matcher matcher = PATTERN_LOAD_TABLE.matcher(section);
         if (matcher.find()) {
             String tableName = matcher.group("tn");
             try {
-                unloadTable(system.tables.get(tableName), con);
+                if (filterTableNames.isEmpty() || filterTableNames.contains(tableName)) {
+                    unloadTable(system.tables.get(tableName), con, targetLoader);
+                }
             } catch (Exception ex) {
                 LOGGER.error("Unable to parse load table '{}'", tableName);
                 throw ex;
@@ -455,20 +454,7 @@ public class SqlAnyHybridImporter implements SqlAnyImporter {
         return m1.find() ? Optional.ofNullable(m1.group(1)) : Optional.empty();
     }
 
-    private void unloadTables(@NotNull DbSystem system, @NotNull Connection con) throws ExecutionException, InterruptedException {
-        String filter = Configuration.getString(Configuration.TARGET_OUTPUT_TABLER_FILTER);
-        List<String> filterTableNames = filter == null ? List.of() : List.of(filter.split(","));
-
-        ForkJoinPool customThreadPool = new ForkJoinPool(20);
-        customThreadPool.submit(() ->
-                system.tables
-                        .values()
-                        .parallelStream()
-                        .filter(t -> filterTableNames.isEmpty() || filterTableNames.contains(t.name))
-                        .forEach(t -> unloadTable(t, con))).get();
-    }
-
-    private void unloadTable(@NotNull DbTable table, @NotNull Connection con) {
+    private void unloadTable(@NotNull DbTable table, @NotNull Connection con, @NotNull SchemaLoader targetLoader) {
         try {
             Path file = Path.of(
                     Configuration.getString(Configuration.TARGET_OUTPUT_PATH),
@@ -477,20 +463,20 @@ public class SqlAnyHybridImporter implements SqlAnyImporter {
 
             LOGGER.info("Unloading table data '{}' into '{}'", table.name, file);
 
+            // Order columns as created in original database
+            List<DbColumn> indexedColumns = table
+                    .columns
+                    .values()
+                    .stream()
+                    .sorted(Comparator.comparing(DbColumn::getIndex))
+                    .toList();
+
             table.content = new DbTableContent();
             table.content.file = file;
             table.content.encoding = Charset.forName(Configuration.getString(Configuration.SOURCE_ENCODING));
-            table.content.columns.addAll(
-                    table.columns
-                            .values()
-                            .stream()
-                            .sorted(Comparator.comparing(DbColumn::getIndex))
-                            .map(c -> c.name).toList());
+            table.content.columns.addAll(indexedColumns.stream().map(c -> c.name).toList());
 
             Files.createDirectories(table.content.file.getParent());
-
-            Map<Integer, DbColumn> indexedColumns = new HashMap<>();
-            table.columns.values().forEach(c -> indexedColumns.put(c.index, c));
 
             try (BufferedWriter writer = Files.newBufferedWriter(file, table.content.encoding)) {
                 String sql = "SELECT %s FROM \"%s\"".formatted(
@@ -507,20 +493,19 @@ public class SqlAnyHybridImporter implements SqlAnyImporter {
                         // LOGGER.debug("Column count {}. DBColumn.count={}", columnCount, table.columns.size());
                         for (int i = 0; i < columnCount; i++) {
                             int index = i + 1;
-                            DbColumn column = indexedColumns.get(index);
+                            DbColumn column = indexedColumns.get(index-1);
 
                             String value = rs.getString(index);
 
-                            if (value == null) {
-                                value = Configuration.getString(Configuration.TARGET_OUTPUT_VALUE_NULL);
+                            if (rs.wasNull()) {
+                                value = null;
 
                                 if (!column.nullable) {
                                     LOGGER.warn("Value of source database table '{}', column '{}' is NULL but must be NOT NULL by schema definition", table.name, column.name);
                                 }
-                            } else {
-                                value = normalizeValue(value);
-                                value = wrapConditionalValue(value, column);
                             }
+
+                            value = targetLoader.denormalizeValue(value, column);
 
                             buffer.add(value);
                         }
@@ -534,34 +519,6 @@ public class SqlAnyHybridImporter implements SqlAnyImporter {
             LOGGER.error(ex.getMessage(), ex);
             throw new AppRuntimeException(ex.getMessage(), ex);
         }
-    }
-
-    @Nullable
-    private String wrapConditionalValue(@Nullable String value, @NotNull DbColumn column) {
-        if (value == null) {
-            return null;
-        }
-
-        // TODO Support any datatype
-        return switch (column.datatype) {
-            case CHAR, VARCHAR, LONG_VARCHAR -> "\"" + value + "\"";
-            case INTEGER, NUMERIC, SMALLINT, BIGINT, TINYINT -> value;
-            // TODO Check date time format
-            case TIMESTAMP -> value;
-            case LONG_BINARY -> "x" + HexFormat.of().formatHex(value.getBytes(StandardCharsets.UTF_8));
-            default -> throw new AppRuntimeException("Datatype " + column.datatype + " currently not support yet.");
-        };
-    }
-
-    @NotNull
-    private String normalizeValue(@NotNull String value) {
-        return value
-                .replace("\\", "\\\\")
-                .replace("\u0000", "")
-                .replace("\"", "\\\"")
-                .replace("\n", "\\n")
-                .replace(",", "\\,")
-                .replace("\r", "\\r");
     }
 
 }

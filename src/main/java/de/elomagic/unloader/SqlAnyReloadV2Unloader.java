@@ -1,4 +1,4 @@
-package de.elomagic.importer;
+package de.elomagic.unloader;
 
 import de.elomagic.AppRuntimeException;
 import de.elomagic.Configuration;
@@ -10,6 +10,7 @@ import de.elomagic.dto.DbSystem;
 import de.elomagic.dto.DbTable;
 import de.elomagic.dto.DbTableConstraint;
 import de.elomagic.dto.DbTableContent;
+import de.elomagic.loader.SchemaLoader;
 
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.tuple.Pair;
@@ -50,9 +51,9 @@ import java.util.stream.Stream;
  * - DBSpaces
  * - Users / Roles
  */
-public class SqlAnyReloadV2Importer implements SqlAnyImporter {
+public class SqlAnyReloadV2Unloader implements SqlAnyUnloader {
 
-    private static final Logger LOGGER = LogManager.getLogger(SqlAnyReloadV2Importer.class);
+    private static final Logger LOGGER = LogManager.getLogger(SqlAnyReloadV2Unloader.class);
 
     // (-{49}\n--\s{3}.*?\n-{49}\n)?(^.*?go\n\n)
     static final String REGEX_GO_SECTIONS = "(^\\w.*?go\\n\\n)";
@@ -140,9 +141,9 @@ public class SqlAnyReloadV2Importer implements SqlAnyImporter {
 
     @Override
     @NotNull
-    public DbSystem importDatabase(String[] args) throws AppRuntimeException {
+    public DbSystem importDatabase(@NotNull SchemaLoader targetLoader) throws AppRuntimeException {
         try {
-            Path file = Paths.get(args.length != 0 ? args[0] : Configuration.getString(Configuration.SOURCE_FILE));
+            Path file = Paths.get(Configuration.getString(Configuration.SOURCE_FILE));
 
             DbSystem system = new DbSystem();
 
@@ -160,7 +161,7 @@ public class SqlAnyReloadV2Importer implements SqlAnyImporter {
             return system;
         } catch (Exception ex) {
             LOGGER.error(ex.getMessage(), ex);
-            throw new AppRuntimeException("args=" + Arrays.toString(args), ex);
+            throw new AppRuntimeException(ex.getMessage(), ex);
         }
     }
 

@@ -1,11 +1,11 @@
-package de.elomagic.importer;
+package de.elomagic.unloader;
 
 import de.elomagic.AppRuntimeException;
 import de.elomagic.dto.DbDataType;
 
 import org.jetbrains.annotations.NotNull;
 
-public interface SqlAnyImporter extends SchemaImporter {
+public interface SqlAnyUnloader extends SchemaImporter {
 
     default DbDataType mapToDbDataType(@NotNull String datatype) {
         return switch (datatype) {

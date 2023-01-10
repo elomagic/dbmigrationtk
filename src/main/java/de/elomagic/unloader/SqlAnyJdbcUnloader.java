@@ -1,4 +1,4 @@
-package de.elomagic.importer;
+package de.elomagic.unloader;
 
 import de.elomagic.AppRuntimeException;
 import de.elomagic.Configuration;
@@ -10,6 +10,7 @@ import de.elomagic.dto.DbIndexComment;
 import de.elomagic.dto.DbSystem;
 import de.elomagic.dto.DbTable;
 import de.elomagic.dto.DbTableContent;
+import de.elomagic.loader.SchemaLoader;
 
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.tuple.Pair;
@@ -51,13 +52,13 @@ import java.util.concurrent.ForkJoinPool;
  * - DBSpaces
  * - Users / Roles
  */
-public class SqlAnyJdbcImporter implements SqlAnyImporter {
+public class SqlAnyJdbcUnloader implements SqlAnyUnloader {
 
-    private static final Logger LOGGER = LogManager.getLogger(SqlAnyJdbcImporter.class);
+    private static final Logger LOGGER = LogManager.getLogger(SqlAnyJdbcUnloader.class);
 
     @Override
     @NotNull
-    public DbSystem importDatabase(String[] args) throws AppRuntimeException {
+    public DbSystem importDatabase(@NotNull SchemaLoader targetLoader) throws AppRuntimeException {
         DbSystem system = new DbSystem();
 
         try (Connection con = DbUtils.createConnection()) {
@@ -70,7 +71,6 @@ public class SqlAnyJdbcImporter implements SqlAnyImporter {
             unloadTables(system, con);
         } catch (Exception ex) {
             LOGGER.error(ex.getMessage(), ex);
-            throw new AppRuntimeException("args=" + Arrays.toString(args), ex);
         }
 
         LOGGER.info("Export of database schema and content finished");

@@ -1,9 +1,9 @@
 package de.elomagic;
 
 import de.elomagic.dto.DbSystem;
-import de.elomagic.exporter.PostgresExporter;
-import de.elomagic.exporter.SchemaExporter;
-import de.elomagic.importer.SchemaImporter;
+import de.elomagic.loader.PostgresLoader;
+import de.elomagic.loader.SchemaLoader;
+import de.elomagic.unloader.SchemaImporter;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -35,7 +35,7 @@ public class App {
             }
 
             App app = new App();
-            app.start(args);
+            app.start();
         } catch (Exception e) {
             LOGGER.error(e.getMessage(), e);
         }
@@ -49,7 +49,7 @@ public class App {
         return properties;
     }
 
-    private void start(String[] args) throws Exception {
+    private void start() throws Exception {
         String translatorClassName = Configuration.getString(Configuration.SOURCE_TRANSLATOR);
         LOGGER.info("Using translator {}", translatorClassName);
 
@@ -58,11 +58,11 @@ public class App {
                 .getDeclaredConstructor()
                 .newInstance();
 
-        DbSystem system = importer.importDatabase(args);
+        SchemaLoader exporter = new PostgresLoader();
+
+        DbSystem system = importer.importDatabase(exporter);
 
         try (Writer writer = createWriter()) {
-            SchemaExporter exporter = new PostgresExporter();
-
             exporter.export(system, writer);
         }
     }

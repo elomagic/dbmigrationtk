@@ -1,16 +1,16 @@
-package de.elomagic.exporter;
+package de.elomagic.loader;
 
 import de.elomagic.AppRuntimeException;
 import de.elomagic.Configuration;
 import de.elomagic.dto.DbColumn;
 import de.elomagic.dto.DbDataType;
 import de.elomagic.dto.DbForeignKey;
+import de.elomagic.dto.DbIndex;
 import de.elomagic.dto.DbIndexComment;
 import de.elomagic.dto.DbSystem;
 import de.elomagic.dto.DbTable;
 import de.elomagic.dto.DbTableConstraint;
 import de.elomagic.dto.DbTableContent;
-import de.elomagic.dto.DbIndex;
 
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
@@ -20,8 +20,10 @@ import org.jetbrains.annotations.Nullable;
 
 import java.io.IOException;
 import java.io.Writer;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Paths;
 import java.util.Comparator;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.Locale;
 import java.util.stream.Collectors;
@@ -44,9 +46,9 @@ import java.util.stream.Collectors;
  * - DBSpaces
  * - Users / Roles
  */
-public class PostgresExporter implements SchemaExporter {
+public class PostgresLoader implements SchemaLoader {
 
-    private static final Logger LOGGER = LogManager.getLogger(PostgresExporter.class);
+    private static final Logger LOGGER = LogManager.getLogger(PostgresLoader.class);
 
     @Override
     public void export(@NotNull DbSystem system, @NotNull Writer writer) throws AppRuntimeException {
@@ -348,7 +350,7 @@ public class PostgresExporter implements SchemaExporter {
                 
                 COPY %s ( %s )
                     FROM '%s'
-                    ( FORMAT TEXT, DELIMITER ',', NULL '', ENCODING '%s' );
+                    ( FORMAT TEXT, DELIMITER ',', ENCODING '%s' );
                 """;
 
             for (DbTable table : system.tables.values()) {
@@ -399,6 +401,51 @@ public class PostgresExporter implements SchemaExporter {
             case CASCADE -> prefix + " CASCADE";
             case RESTRICT -> prefix + " RESTRICT";
             case SET_NULL -> prefix + " SET NULL";
+        };
+    }
+
+    @Nullable
+    public String denormalizeValue(@Nullable String rawValue, @NotNull DbColumn column) {
+        if (rawValue == null) {
+            return "\\N";
+        }
+
+        if ("".equals(rawValue)) {
+            return "";
+        }
+
+        // TODO Support any datatype
+        /*
+        String rawValue = switch (column.datatype) {
+            case CHAR, VARCHAR, LONG_VARCHAR -> rawValue ;
+            case INTEGER, NUMERIC, SMALLINT, BIGINT, TINYINT -> value;
+            // TODO Check date time format
+            case TIMESTAMP, DATETIME -> value;
+            case BINARY, LONG_BINARY -> "x" + HexFormat.of().formatHex(value.getBytes(StandardCharsets.UTF_8));
+            default -> throw new AppRuntimeException("Datatype " + column.datatype + " currently not support yet.");
+        };
+
+         */
+
+        /*
+         * Backslash characters (\) can be used in the COPY data to quote data characters that might otherwise be taken
+         * as row or column delimiters. In particular, the following characters must be preceded by a backslash if they
+         * appear as part of a column value: backslash itself, newline, carriage return, and the current delimiter
+         * character.
+         */
+        return switch (column.datatype) {
+            case BINARY, LONG_BINARY -> ("\\x" + HexFormat.of().formatHex(rawValue.getBytes(StandardCharsets.UTF_8)));
+            case INTEGER, NUMERIC, SMALLINT, BIGINT, TINYINT -> rawValue;
+            default -> rawValue
+                    .replace("\\", "\\\\")
+                    .replace("\u0000", "")
+                    .replace("\"", "\\\"")
+                    .replace("\b", "\\b")
+                    .replace("\f", "\\f")
+                    .replace("\n", "\\n")
+                    .replace("\r", "\\r")
+                    .replace("\t", "\\t")
+                    .replace(",", "\\,");
         };
     }
 

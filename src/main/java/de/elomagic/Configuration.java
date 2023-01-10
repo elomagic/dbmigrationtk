@@ -21,7 +21,7 @@ public enum Configuration {
     TARGET_BACKUP_ROLE("de.elomagic.dbtk.target.backupRole", "backup"),
     TARGET_OUTPUT_PATH("de.elomagic.dbtk.target.output.path", ".\\target"),
     TARGET_OUTPUT_TABLER_FILTER("de.elomagic.dbtk.target.output.table.filter", null),
-    TARGET_OUTPUT_VALUE_NULL("de.elomagic.dbtk.target.output.value.null", "");
+    TARGET_OUTPUT_VALUE_NULL("de.elomagic.dbtk.target.output.value.null", "\\N");
 
     private final String key;
     private final String defaultValue;

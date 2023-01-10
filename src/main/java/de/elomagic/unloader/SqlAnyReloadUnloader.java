@@ -1,9 +1,11 @@
-package de.elomagic.importer;
+package de.elomagic.unloader;
 
 import de.elomagic.AppRuntimeException;
+import de.elomagic.Configuration;
 import de.elomagic.dto.DbColumn;
 import de.elomagic.dto.DbSystem;
 import de.elomagic.dto.DbTable;
+import de.elomagic.loader.SchemaLoader;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -14,7 +16,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 import java.util.regex.Matcher;
@@ -24,9 +25,9 @@ import java.util.stream.Stream;
 /**
  * Doesn't work well because of an RegEx issue?
  */
-public class ReloadSqlImporter implements SqlAnyImporter {
+public class SqlAnyReloadUnloader implements SqlAnyUnloader {
 
-    private static final Logger LOGGER = LogManager.getLogger(ReloadSqlImporter.class);
+    private static final Logger LOGGER = LogManager.getLogger(SqlAnyReloadUnloader.class);
 
     static final String REGEX_TABLE_SQL = "^(?<sql>CREATE TABLE.*?\\))(\\sIN\\s\\\".*\\\")?\\ngo";
     private static final Pattern PATTERN_TABLE_SQL = Pattern.compile(REGEX_TABLE_SQL, Pattern.MULTILINE | Pattern.DOTALL);
@@ -44,9 +45,9 @@ public class ReloadSqlImporter implements SqlAnyImporter {
 
     @Override
     @NotNull
-    public DbSystem importDatabase(String[] args) throws AppRuntimeException {
+    public DbSystem importDatabase(@NotNull SchemaLoader targetLoader) throws AppRuntimeException {
         try {
-            Path file = Paths.get(args.length != 0 ? args[0] : "c:\\projects\\db\\ris-unloaded-example\\reload.sql");
+            Path file = Paths.get(Configuration.getString(Configuration.SOURCE_FILE));
 
             DbSystem system = new DbSystem();
 
@@ -64,7 +65,7 @@ public class ReloadSqlImporter implements SqlAnyImporter {
             return system;
         } catch (Exception ex) {
             LOGGER.error(ex.getMessage(), ex);
-            throw new AppRuntimeException("args=" + Arrays.toString(args), ex);
+            throw new AppRuntimeException(ex.getMessage(), ex);
         }
     }
 
