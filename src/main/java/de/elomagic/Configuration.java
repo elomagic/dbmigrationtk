@@ -10,8 +10,9 @@ public enum Configuration {
     SOURCE_FILE("de.elomagic.dbtk.source.file", null),
     SOURCE_EXPORT_PATH("de.elomagic.dbtk.source.export.path", null),
     SOURCE_ENCODING("de.elomagic.dbtk.source.encoding", "UTF-8"),
-    SOURCE_TRANSLATOR("de.elomagic.dbtk.source.translator", "de.elomagic.importer.JdbcSqlAnyImporter"),
+    SOURCE_UNLOADER_CLASS("de.elomagic.dbtk.source.unloaderClass", "de.elomagic.unloader.SqlAnyHybridUnloader"),
 
+    TARGET_LOADER_CLASS("de.elomagic.dbtk.target.loaderClass", "de.elomagic.loader.PostgresLoader"),
     TARGET_DATABASE_NAME("de.elomagic.dbtk.target.databaseName", "MigratedDatabase"),
     TARGET_ENCODING("de.elomagic.dbtk.target.encoding", "UTF8"),
     TARGET_CTYPE("de.elomagic.dbtk.target.ctype", "en_US.utf8"),

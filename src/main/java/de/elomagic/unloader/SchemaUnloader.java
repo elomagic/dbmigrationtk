@@ -7,7 +7,7 @@ import de.elomagic.loader.SchemaLoader;
 import org.jetbrains.annotations.NotNull;
 
 @FunctionalInterface
-public interface SchemaImporter {
+public interface SchemaUnloader {
 
     @NotNull DbSystem importDatabase(@NotNull SchemaLoader targetLoader) throws AppRuntimeException;
 

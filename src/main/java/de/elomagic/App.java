@@ -1,9 +1,8 @@
 package de.elomagic;
 
 import de.elomagic.dto.DbSystem;
-import de.elomagic.loader.PostgresLoader;
 import de.elomagic.loader.SchemaLoader;
-import de.elomagic.unloader.SchemaImporter;
+import de.elomagic.unloader.SchemaUnloader;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -50,20 +49,25 @@ public class App {
     }
 
     private void start() throws Exception {
-        String translatorClassName = Configuration.getString(Configuration.SOURCE_TRANSLATOR);
-        LOGGER.info("Using translator {}", translatorClassName);
+        String unloaderClassName = Configuration.getString(Configuration.SOURCE_UNLOADER_CLASS);
+        LOGGER.info("Using unloader class '{}'", unloaderClassName);
 
-        SchemaImporter importer = (SchemaImporter)Class
-                .forName(translatorClassName)
+        SchemaUnloader importer = (SchemaUnloader)Class
+                .forName(unloaderClassName)
                 .getDeclaredConstructor()
                 .newInstance();
 
-        SchemaLoader exporter = new PostgresLoader();
+        String loaderClassName = Configuration.getString(Configuration.TARGET_LOADER_CLASS);
+        LOGGER.info("Using loader class '{}'", loaderClassName);
+        SchemaLoader loader = (SchemaLoader)Class
+                .forName(loaderClassName)
+                .getDeclaredConstructor()
+                .newInstance();
 
-        DbSystem system = importer.importDatabase(exporter);
+        DbSystem system = importer.importDatabase(loader);
 
         try (Writer writer = createWriter()) {
-            exporter.export(system, writer);
+            loader.export(system, writer);
         }
     }
 

@@ -5,7 +5,7 @@ import de.elomagic.dto.DbDataType;
 
 import org.jetbrains.annotations.NotNull;
 
-public interface SqlAnyUnloader extends SchemaImporter {
+public interface SqlAnyUnloader extends SchemaUnloader {
 
     default DbDataType mapToDbDataType(@NotNull String datatype) {
         return switch (datatype) {
