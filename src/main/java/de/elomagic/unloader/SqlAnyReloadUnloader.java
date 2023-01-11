@@ -79,7 +79,7 @@ public interface SqlAnyReloadUnloader extends SqlAnyUnloader {
      * go
      *
      *
-     * ^ALTER TABLE \"(?<o>.*)\".\"(?<tn>.*)\"\n\s{4}ADD (NOT NULL )?FOREIGN KEY \"(?<name>.*)\" \((?<cns>.*)\)\n\s{4}REFERENCES \"(?<ro>.*)\".\"(?<rtn>.*)\" \((?<rcns>.*)\)\n\s{4}(?<oua>ON UPDATE\s(SET NULL|CASCADE))\s?(?<oda>ON DELETE\s(SET NULL|CASCADE))?
+     * ^ALTER TABLE \"(?<o>.*)\".\"(?<tn>.*)\"\n\s{4}ADD (NOT NULL )?FOREIGN KEY \"(?<name>.*)\" \((?<cns>.*)\)\n\s{4}REFERENCES \"(?<ro>.*)\".\"(?<rtn>.*)\" \((?<rcns>.*)\)\n\s{4}(ON UPDATE\s(?<oua>SET NULL|CASCADE))\s?(ON DELETE\s(?<oda>SET NULL|CASCADE))?
      */
     String REGEX_CREATE_FK = "^ALTER TABLE \\\"(?<o>.*)\\\".\\\"(?<tn>.*)\\\"\\n\\s{4}ADD (NOT NULL )?FOREIGN KEY \\\"(?<name>.*)\\\" \\((?<cns>.*)\\)\\n\\s{4}REFERENCES \\\"(?<ro>.*)\\\".\\\"(?<rtn>.*)\\\" \\((?<rcns>.*)\\)\\n\\s{4}(?<oua>ON UPDATE\\s(SET NULL|CASCADE))\\s?(?<oda>ON DELETE\\s(SET NULL|CASCADE))?";
     Pattern PATTERN_CREATE_FK = Pattern.compile(REGEX_CREATE_FK, Pattern.MULTILINE | Pattern.DOTALL);
