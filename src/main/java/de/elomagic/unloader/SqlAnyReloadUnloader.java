@@ -1,6 +1,19 @@
 package de.elomagic.unloader;
 
+import de.elomagic.AppRuntimeException;
+import de.elomagic.dto.DbForeignKey;
+
+import org.apache.commons.lang3.StringUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Stream;
 
 /**
  * Doesn't work well because of an RegEx issue?
@@ -80,8 +93,9 @@ public interface SqlAnyReloadUnloader extends SqlAnyUnloader {
      *
      *
      * ^ALTER TABLE \"(?<o>.*)\".\"(?<tn>.*)\"\n\s{4}ADD (NOT NULL )?FOREIGN KEY \"(?<name>.*)\" \((?<cns>.*)\)\n\s{4}REFERENCES \"(?<ro>.*)\".\"(?<rtn>.*)\" \((?<rcns>.*)\)\n\s{4}(ON UPDATE\s(?<oua>SET NULL|CASCADE))\s?(ON DELETE\s(?<oda>SET NULL|CASCADE))?
+     * ^ALTER TABLE \"(?<o>.*)\".\"(?<tn>.*)\"\n\s{4}ADD (NOT NULL )?FOREIGN KEY \"(?<name>.*)\" \((?<cns>.*)\)\n\s{4}REFERENCES \"(?<ro>.*)\".\"(?<rtn>.*)\" \((?<rcns>.*)\)\n\s{4}(?<oua>ON UPDATE\s(SET NULL|CASCADE))\s?(?<oda>ON DELETE\s(SET NULL|CASCADE))?
      */
-    String REGEX_CREATE_FK = "^ALTER TABLE \\\"(?<o>.*)\\\".\\\"(?<tn>.*)\\\"\\n\\s{4}ADD (NOT NULL )?FOREIGN KEY \\\"(?<name>.*)\\\" \\((?<cns>.*)\\)\\n\\s{4}REFERENCES \\\"(?<ro>.*)\\\".\\\"(?<rtn>.*)\\\" \\((?<rcns>.*)\\)\\n\\s{4}(?<oua>ON UPDATE\\s(SET NULL|CASCADE))\\s?(?<oda>ON DELETE\\s(SET NULL|CASCADE))?";
+    String REGEX_CREATE_FK = "^ALTER TABLE \\\"(?<o>.*)\\\".\\\"(?<tn>.*)\\\"\\n\\s{4}ADD (NOT NULL )?FOREIGN KEY \\\"(?<name>.*)\\\" \\((?<cns>.*)\\)\\n\\s{4}REFERENCES \\\"(?<ro>.*)\\\".\\\"(?<rtn>.*)\\\" \\((?<rcns>.*)\\)\\n\\s{4}(ON UPDATE\\s(?<oua>SET NULL|CASCADE))\\s?(ON DELETE\\s(?<oda>SET NULL|CASCADE))?";
     Pattern PATTERN_CREATE_FK = Pattern.compile(REGEX_CREATE_FK, Pattern.MULTILINE | Pattern.DOTALL);
 
     /**
@@ -92,5 +106,38 @@ public interface SqlAnyReloadUnloader extends SqlAnyUnloader {
      */
     String REGEX_RESET_IDENTITY = "^call dbo.sa_reset_identity\\('(?<tn>.*?)', '(?<owner>.*?)', (?<nv>\\d*?)\\);";
     Pattern PATTERN_RESET_IDENTITY = Pattern.compile(REGEX_RESET_IDENTITY);
+
+    @NotNull
+    default DbForeignKey.RefAction mapFkAction(@Nullable String action) {
+        if (StringUtils.isBlank(action)) {
+            return DbForeignKey.RefAction.NO_ACTION;
+        }
+
+        return switch (action) {
+            case "CASCADE" -> DbForeignKey.RefAction.CASCADE;
+            case "SET NULL" -> DbForeignKey.RefAction.SET_NULL;
+
+            default -> throw new AppRuntimeException("Unsupported action '" + action + "'.");
+        };
+    }
+
+    default Stream<String> streamGoSections(@NotNull String reloadScript) {
+        Matcher matcher = PATTERN_GO_SECTIONS.matcher(reloadScript);
+
+        Logger logger = LogManager.getLogger(SqlAnyReloadUnloader.class);
+
+        logger.info("Parsing reload script for GO section...");
+        List<String> gos = new ArrayList<>();
+
+        while (matcher.find()) {
+            String section = matcher.group(0);
+            logger.trace("GO found: {}", section);
+            gos.add(section);
+        }
+
+        logger.debug("{} GO sections found.", gos.size());
+
+        return gos.stream();
+    }
 
 }

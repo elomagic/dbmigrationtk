@@ -22,7 +22,6 @@ import java.nio.charset.Charset;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
@@ -30,7 +29,6 @@ import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 /**
  * Open issue
@@ -79,23 +77,6 @@ public class SqlAnyReloadV2Unloader implements SqlAnyReloadUnloader {
             LOGGER.error(ex.getMessage(), ex);
             throw new AppRuntimeException(ex.getMessage(), ex);
         }
-    }
-
-    private Stream<String> streamGoSections(@NotNull String reloadScript) {
-        Matcher matcher = PATTERN_GO_SECTIONS.matcher(reloadScript);
-
-        LOGGER.info("Parsing reload script for GO section...");
-        List<String> gos = new ArrayList<>();
-
-        while (matcher.find()) {
-            String section = matcher.group(0);
-            LOGGER.trace("GO found: {}", section);
-            gos.add(section);
-        }
-
-        LOGGER.debug("{} GO sections found.", gos.size());
-
-        return gos.stream();
     }
 
     private void processSection(@NotNull String section, @NotNull DbSystem system) {

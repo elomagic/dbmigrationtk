@@ -5,23 +5,6 @@ import org.apache.commons.lang3.tuple.Pair;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * SQL Any
- * <code>
- *     ALTER TABLE "dba"."TABLE"
- *         ADD FOREIGN KEY "FK_NAME" ("DOC_ID" ASC)
- *         REFERENCES "dba"."DOC" ("DOC_ID")
- *         ON UPDATE SET NULL ON DELETE SET NULL
- * </code>
- *
- * <code>
- *     ALTER TABLE "dba"."TABLE"
- *         ADD FOREIGN KEY "FK_NAME" ("RECHNUNG_ID" ASC)
- *         REFERENCES "dba"."INVOICE" ("RECHNUNG_ID")
- *         ON UPDATE CASCADE ON DELETE CASCADE
- * go
- * </code>
- */
 public class DbForeignKey {
 
     public enum RefAction {
@@ -33,7 +16,7 @@ public class DbForeignKey {
 
     public String owner;
     public String tableName;
-    public String fkName;
+    public String name;
     /**
      * Key = Column Name,
      * Value = Sorting (DESC=true)]

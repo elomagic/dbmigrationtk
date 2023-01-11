@@ -30,21 +30,11 @@ import java.util.stream.Collectors;
 
 /**
  * TODO's
- * - Sequences (To be checked)
- * - Autoinc (Sequences) (To be checked)
  * - Columns value defaults (To be checked)
  * - Strange column definition like "Feld2" char(20) NULL INLINE 20 PREFIX 8 (To be checked)
- * - Reload data
- * - DB Functions (Incl. comments)
- * - DB Views
- * - DB Procedures (Incl. comments)
- * - DB Events
  * - DB Constraints
  * - Set Timestamp format
  *
- * Ignores:
- * - DBSpaces
- * - Users / Roles
  */
 public class PostgresLoader implements SchemaLoader {
 
@@ -53,12 +43,35 @@ public class PostgresLoader implements SchemaLoader {
     @Override
     public void export(@NotNull DbSystem system, @NotNull Writer writer) throws AppRuntimeException {
         writeDatabase(writer);
+        // TODO Create db spaces ???
+        // TODO Create users ???
+        // TODO Create roles ???
+        // TODO Create dbspace permissions ???
+        // TODO Create sequences
         writeTables(writer, system);
         writeLoadTables(writer, system);
         writeForeignKeys(writer, system);
         writeIndexes(writer, system);
+        // TODO Create functions (skeletons ?)
+        // TODO Create views
+        // TODO Create procedures (skeletons ?)
+        // TODO Create triggers (skeletons ?)
+        // TODO Create Events ???
 
         LOGGER.debug("Writing SQL done");
+    }
+
+    private void writeSectionDescription(@NotNull Writer writer, @NotNull String text) throws IOException {
+        writer.append("""
+            
+            %s
+            -- %s
+            %s
+                            
+            """.formatted(
+                StringUtils.leftPad("", 49, "-"),
+                text,
+                StringUtils.leftPad("", 49, "-")));
     }
 
     private void writeDatabase(@NotNull Writer writer) throws AppRuntimeException {
@@ -106,11 +119,16 @@ public class PostgresLoader implements SchemaLoader {
 
     private void writeTables(@NotNull Writer writer, @NotNull DbSystem system) throws AppRuntimeException {
         LOGGER.info("Writing tables SQL");
+        try {
+            writeSectionDescription(writer,"Create tables");
 
-        system.tables.values()
-                .stream()
-                .sorted(Comparator.comparing(DbTable::getId))
-                .forEach(t -> writeTable(writer, t));
+            system.tables.values()
+                    .stream()
+                    .sorted(Comparator.comparing(DbTable::getId))
+                    .forEach(t -> writeTable(writer, t));
+        } catch (Exception ex) {
+            throw new AppRuntimeException(ex.getMessage(), ex);
+        }
     }
 
     private void writeTable(@NotNull Writer writer, @NotNull DbTable table) throws AppRuntimeException {
@@ -130,9 +148,6 @@ public class PostgresLoader implements SchemaLoader {
                     .forEach(c -> writeSequencerSql(writer, table, c));
 
             writer.append(String.format(CREATE_TABLE_PATTERN, table.name, columns));
-
-            // createSequencerSql(table,)
-            // TODO Create FK
 
             writer.append("\n");
             writeTableConstraints(writer, table);
@@ -281,7 +296,8 @@ public class PostgresLoader implements SchemaLoader {
 
     private void writeForeignKeys(@NotNull Writer writer, @NotNull DbSystem system) {
         try {
-            writer.append("\n");
+            writeSectionDescription(writer,"Create foreign keys");
+
             final String SQL = """
                     ALTER TABLE %s
                         ADD CONSTRAINT "%s"
@@ -292,7 +308,7 @@ public class PostgresLoader implements SchemaLoader {
             for (DbForeignKey fk : system.foreignKeys) {
                 writer.append(String.format(SQL,
                         fk.tableName,
-                        fk.fkName,
+                        fk.name,
                         String.join(", ", fk
                                 .fkColumns
                                 .stream()
@@ -316,7 +332,8 @@ public class PostgresLoader implements SchemaLoader {
 
     private void writeIndexes(@NotNull Writer writer, @NotNull DbSystem system) {
         try {
-            writer.append("\n");
+            writeSectionDescription(writer,"Create indexes");
+
             final String SQL = "CREATE %sINDEX \"%s\" ON %s ( %s );\n";
             final String SQL_COMMENT = "COMMENT ON INDEX %s IS '%s';\n";
 
@@ -345,7 +362,8 @@ public class PostgresLoader implements SchemaLoader {
 
     private void writeLoadTables(@NotNull Writer writer, @NotNull DbSystem system) {
         try {
-            // TODO Default and simple COPY FROM won't work. May be, a use of "PROGRAM 'sed ...' < /db_unload/unloaded/1234.dat" may fix the problem
+            writeSectionDescription(writer,"Reload data");
+
             final String SQL = """
                 
                 COPY %s ( %s )

@@ -281,7 +281,7 @@ public class SqlAnyJdbcUnloader implements SqlAnyUnloader {
         try (PreparedStatement statement = DbUtils.createPrepareStatement(con, sql, List.of()); ResultSet rs = statement.executeQuery()) {
             while (rs.next()) {
                 DbForeignKey fk = new DbForeignKey();
-                fk.fkName = rs.getString("fk_name");
+                fk.name = rs.getString("fk_name");
                 fk.owner = rs.getString("user_name");
                 fk.tableName = rs.getString("p_table_name");
                 fk.referenceTable = rs.getString("fk_table_name");
@@ -295,12 +295,11 @@ public class SqlAnyJdbcUnloader implements SqlAnyUnloader {
                 fk.fkColumns = columnNames;
 
                 String fcols = rs.getString("f_cols");
-                List<String> fcolumnNames = Arrays
+                fk.referenceColumns = Arrays
                         .stream(fcols.split(","))
                         .map(c -> c.replace("\"", "").trim())
                         //.map(c -> Pair.of(c.split(" ")[0].trim(), c.endsWith(" D")))
                         .toList();
-                fk.referenceColumns = fcolumnNames;
 
                 // TODO match mode and cascade. Looks that database handles "cascade" with triggers
 

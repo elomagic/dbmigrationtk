@@ -37,7 +37,6 @@ import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 /**
  *
@@ -47,7 +46,6 @@ import java.util.stream.Stream;
  * TODO's
  * - Sequences 
  * - Strange column definition like "Feld2" char(20) NULL INLINE 20 PREFIX 8
- * - DB Foreign keys
  * - DB Constraints
  * - DB Functions (Incl. comments)
  * - DB Views
@@ -91,23 +89,6 @@ public class SqlAnyHybridUnloader implements SqlAnyReloadUnloader {
         }
     }
 
-    private Stream<String> streamGoSections(@NotNull String reloadScript) {
-        Matcher matcher = PATTERN_GO_SECTIONS.matcher(reloadScript);
-
-        LOGGER.info("Parsing reload script for GO section...");
-        List<String> gos = new ArrayList<>();
-
-        while (matcher.find()) {
-            String section = matcher.group(0);
-            LOGGER.trace("GO found: {}", section);
-            gos.add(section);
-        }
-
-        LOGGER.debug("{} GO sections found.", gos.size());
-
-        return gos.stream();
-    }
-
     private void processSection(@NotNull String section, @NotNull DbSystem system, @NotNull Connection con, @NotNull SchemaLoader targetLoader) {
         if (PATTERN_TABLE_NAME.matcher(section).find()) {
             processCreateTable(section, system);
@@ -136,7 +117,6 @@ public class SqlAnyHybridUnloader implements SqlAnyReloadUnloader {
 
     private void processSequence(@NotNull String section, @NotNull DbSystem system) {
         LOGGER.trace("Processing sequence: {}", section);
-
 
         Matcher matcher = PATTERN_SEQUENCE.matcher(section);
         if (matcher.find()) {
@@ -244,36 +224,33 @@ public class SqlAnyHybridUnloader implements SqlAnyReloadUnloader {
     }
 
     private void processCreateForeignKey(@NotNull String section, @NotNull DbSystem system) {
-        Matcher matcher = PATTERN_CREATE_FK.matcher(section);
-        if (matcher.find()) {
-            String fkOwner = matcher.group("owner");
-            String fkTableName = matcher.group("tn");
-            String fkName = matcher.group("name");
-            String fkColumnNames = matcher.group("cns");
-            String refOwner = matcher.group("fo");
-            String refTableName = matcher.group("rtn");
-            String refColumnNames = matcher.group("fcns");
-            String updateAction = matcher.group("oua");
-            String deleteAction = matcher.group("oda");
-
-            /*
-            List<Pair<String, Boolean>> columnNames = Arrays
-                    .stream(cols.split(","))
-                    .map(c -> c.replace("\"", "").trim())
-                    .map(c -> Pair.of(c.split(" ")[0].trim(), c.endsWith(" DESC")))
-                    .toList();
-            */
-            try {
+        try {
+            Matcher matcher = PATTERN_CREATE_FK.matcher(section);
+            if (matcher.find()) {
                 // LOGGER.trace("Getting comment of table index {}.{}", tableName, indexName);
-
                 DbForeignKey fk = new DbForeignKey();
-                fk.fkName = fkName;
+                fk.name = matcher.group("name");
+                fk.owner = matcher.group("o");
+                fk.tableName = matcher.group("tn");
+                fk.fkColumns= Arrays
+                        .stream(matcher.group("cns").split(","))
+                        .map(c -> c.replace("\"", "").trim())
+                        .map(c -> Pair.of(c.split(" ")[0].trim(), c.endsWith(" DESC")))
+                        .toList();
+                fk.referenceOwner = matcher.group("ro");
+                fk.referenceTable = matcher.group("rtn");
+                fk.referenceColumns = Arrays
+                        .stream(matcher.group("rcns").split(","))
+                        .map(c -> c.replace("\"", "").trim())
+                        .toList();
+                fk.actionOnUpdate = mapFkAction(matcher.group("oua"));
+                fk.actionOnDelete = mapFkAction(matcher.group("oda"));
 
-                // system.foreignKeys.add(fk);
-            } catch (Exception ex) {
-                LOGGER.error("Unable to parse fk section '{}'", section);
-                throw ex;
+                system.foreignKeys.add(fk);
             }
+        } catch (Exception ex) {
+            LOGGER.error("Unable to parse fk section '{}'", section);
+            throw ex;
         }
     }
 
@@ -307,7 +284,6 @@ public class SqlAnyHybridUnloader implements SqlAnyReloadUnloader {
             }
         }
     }
-
 
     private void processIndexComment(@NotNull String section, @NotNull DbSystem system) {
         Matcher matcher = PATTERN_COMMENT_INDEX.matcher(section);
