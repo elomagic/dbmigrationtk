@@ -4,6 +4,7 @@ import de.elomagic.AppRuntimeException;
 import de.elomagic.Configuration;
 import de.elomagic.DbUtils;
 import de.elomagic.dto.DbColumn;
+import de.elomagic.dto.DbForeignKey;
 import de.elomagic.dto.DbIndex;
 import de.elomagic.dto.DbIndexComment;
 import de.elomagic.dto.DbSequence;
@@ -120,6 +121,8 @@ public class SqlAnyHybridUnloader implements SqlAnyReloadUnloader {
             processSequence(section, system);
         } else if (PATTERN_CREATE_INDEX.matcher(section).find()) {
             processCreateIndex(section, system);
+        } else if (PATTERN_CREATE_FK.matcher(section).find()) {
+            processCreateForeignKey(section, system);
         } else if (PATTERN_COMMENT_INDEX.matcher(section).find()) {
             processIndexComment(section, system);
         } else if (PATTERN_LOAD_TABLE.matcher(section).find()) {
@@ -240,6 +243,40 @@ public class SqlAnyHybridUnloader implements SqlAnyReloadUnloader {
         }
     }
 
+    private void processCreateForeignKey(@NotNull String section, @NotNull DbSystem system) {
+        Matcher matcher = PATTERN_CREATE_FK.matcher(section);
+        if (matcher.find()) {
+            String fkOwner = matcher.group("owner");
+            String fkTableName = matcher.group("tn");
+            String fkName = matcher.group("name");
+            String fkColumnNames = matcher.group("cns");
+            String refOwner = matcher.group("fo");
+            String refTableName = matcher.group("rtn");
+            String refColumnNames = matcher.group("fcns");
+            String updateAction = matcher.group("oua");
+            String deleteAction = matcher.group("oda");
+
+            /*
+            List<Pair<String, Boolean>> columnNames = Arrays
+                    .stream(cols.split(","))
+                    .map(c -> c.replace("\"", "").trim())
+                    .map(c -> Pair.of(c.split(" ")[0].trim(), c.endsWith(" DESC")))
+                    .toList();
+            */
+            try {
+                // LOGGER.trace("Getting comment of table index {}.{}", tableName, indexName);
+
+                DbForeignKey fk = new DbForeignKey();
+                fk.fkName = fkName;
+
+                // system.foreignKeys.add(fk);
+            } catch (Exception ex) {
+                LOGGER.error("Unable to parse fk section '{}'", section);
+                throw ex;
+            }
+        }
+    }
+
     private void processCreateIndex(@NotNull String section, @NotNull DbSystem system) {
         Matcher matcher = PATTERN_CREATE_INDEX.matcher(section);
         if (matcher.find()) {
@@ -270,6 +307,7 @@ public class SqlAnyHybridUnloader implements SqlAnyReloadUnloader {
             }
         }
     }
+
 
     private void processIndexComment(@NotNull String section, @NotNull DbSystem system) {
         Matcher matcher = PATTERN_COMMENT_INDEX.matcher(section);
