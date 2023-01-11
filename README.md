@@ -67,6 +67,8 @@ Prototype of an toolkit for translating SQLAnywhere "reload" SQL script into Pos
       In this case, the database table unload will also be done by step 2.
     
 2. Translate SQL with Java application
+    >If import via JDBC is required, you must add the database driver JAR to your classpath
+
     ```powershell
     // TODO java ...
     ```
