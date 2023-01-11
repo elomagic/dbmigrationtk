@@ -34,29 +34,29 @@ public abstract class SqlAnyReloadUnloader implements SqlAnyUnloader {
 
     private static final Logger LOGGER = LogManager.getLogger(SqlAnyReloadUnloader.class);
 
-    String REGEX_GO_SECTIONS = "(^\\w.*?go\\n\\n)";
-    Pattern PATTERN_GO_SECTIONS = Pattern.compile(REGEX_GO_SECTIONS, Pattern.MULTILINE | Pattern.DOTALL);
+    private static final String REGEX_GO_SECTIONS = "(^\\w.*?go\\n\\n)";
+    protected static final Pattern PATTERN_GO_SECTIONS = Pattern.compile(REGEX_GO_SECTIONS, Pattern.MULTILINE | Pattern.DOTALL);
 
-    String REGEX_TABLE_SQL = "^(?<sql>CREATE TABLE.*?\\))(\\sIN\\s\\\".*\\\")?\\ngo";
-    Pattern PATTERN_TABLE_SQL = Pattern.compile(REGEX_TABLE_SQL, Pattern.MULTILINE | Pattern.DOTALL);
-    String REGEX_TABLE_NAME = "(CREATE TABLE \\\"(?<o>.*)\\\"\\.\\\")(?<tn>.*)(\\\")";
-    Pattern PATTERN_TABLE_NAME = Pattern.compile(REGEX_TABLE_NAME, Pattern.MULTILINE);
+    private static final String REGEX_TABLE_SQL = "^(?<sql>CREATE TABLE.*?\\))(\\sIN\\s\\\".*\\\")?\\ngo";
+    protected static final Pattern PATTERN_TABLE_SQL = Pattern.compile(REGEX_TABLE_SQL, Pattern.MULTILINE | Pattern.DOTALL);
+    private static final String REGEX_TABLE_NAME = "(CREATE TABLE \\\"(?<o>.*)\\\"\\.\\\")(?<tn>.*)(\\\")";
+    protected static final Pattern PATTERN_TABLE_NAME = Pattern.compile(REGEX_TABLE_NAME, Pattern.MULTILINE);
     // ^   [\s|,]\"(?<column>\S*?)\"\s+(?<datatype>.*?)\s(?<nullable>NOT NULL?|NULL)(?<rest>.*?)$
-    String REGEX_TABLE_COLUMNS = "^   [\\s|,]\\\"(?<cn>\\S*?)\\\"\\s+(?<datatype>.*?)\\s(?<nullable>NOT NULL?|NULL)(?<def> DEFAULT )?(?<dv>.*?)$";
-    Pattern PATTERN_TABLE_COLUMNS = Pattern.compile(REGEX_TABLE_COLUMNS, Pattern.MULTILINE);
+    private static final String REGEX_TABLE_COLUMNS = "^   [\\s|,]\\\"(?<cn>\\S*?)\\\"\\s+(?<datatype>.*?)\\s(?<nullable>NOT NULL?|NULL)(?<def> DEFAULT )?(?<dv>.*?)$";
+    protected static final Pattern PATTERN_TABLE_COLUMNS = Pattern.compile(REGEX_TABLE_COLUMNS, Pattern.MULTILINE);
     static final String REGEX_TABLE_PK = "^   ,PRIMARY KEY \\(\\\"(?<column>.*)\\\"\\s+(?<order>ASC|DESC)\\)";
-    Pattern PATTERN_TABLE_PK = Pattern.compile(REGEX_TABLE_PK, Pattern.MULTILINE);
-    String REGEX_TABLE_COMMENT = "^COMMENT ON TABLE \\\"(?<owner>.*?)\\\"\\.\\\"(?<tn>.*?)\\\"\\sIS\\s\\n\\t'(?<comment>.*?)\\'$";
-    Pattern PATTERN_TABLE_COMMENT = Pattern.compile(REGEX_TABLE_COMMENT, Pattern.MULTILINE | Pattern.DOTALL);
-    String REGEX_COLUMN_COMMENT = "^COMMENT ON COLUMN \\\"(?<owner>.*?)\\\"\\.\\\"(?<tn>.*?)\\\"\\.\\\"(?<cn>.*?)\\\"\\sIS\\s\\n\\t'(?<comment>.*?)\\'$";
-    Pattern PATTERN_COLUMN_COMMENT = Pattern.compile(REGEX_COLUMN_COMMENT, Pattern.MULTILINE | Pattern.DOTALL);
+    protected static final Pattern PATTERN_TABLE_PK = Pattern.compile(REGEX_TABLE_PK, Pattern.MULTILINE);
+    private static final String REGEX_TABLE_COMMENT = "^COMMENT ON TABLE \\\"(?<owner>.*?)\\\"\\.\\\"(?<tn>.*?)\\\"\\sIS\\s\\n\\t'(?<comment>.*?)\\'$";
+    protected static final Pattern PATTERN_TABLE_COMMENT = Pattern.compile(REGEX_TABLE_COMMENT, Pattern.MULTILINE | Pattern.DOTALL);
+    private static final String REGEX_COLUMN_COMMENT = "^COMMENT ON COLUMN \\\"(?<owner>.*?)\\\"\\.\\\"(?<tn>.*?)\\\"\\.\\\"(?<cn>.*?)\\\"\\sIS\\s\\n\\t'(?<comment>.*?)\\'$";
+    protected static final Pattern PATTERN_COLUMN_COMMENT = Pattern.compile(REGEX_COLUMN_COMMENT, Pattern.MULTILINE | Pattern.DOTALL);
     // ^ALTER TABLE \"(?<o>.*)\".\"(?<tn>.*)\"\n\s{4}ADD( CONSTRAINT )?\"?(?<n>.*)\"? UNIQUE \(\s(?<cn>\".*\")\s\)
     // ALTER TABLE \"(?<o>.*)\".\"(?<tn>.*)\"\n\s{4}ADD UNIQUE \(\s\"(?<cn>.*)\"\s\)
-    String REGEX_ALTER_COLUMN_UNIQUE = "^ALTER TABLE \\\"(?<o>.*)\\\".\\\"(?<tn>.*)\\\"\\n\\s{4}ADD( CONSTRAINT )?\\\"?(?<name>.*)\\\"? UNIQUE \\(\\s(?<cn>\\\".*\\\")\\s\\)";
-    Pattern PATTERN_ALTER_COLUMN_UNIQUE = Pattern.compile(REGEX_ALTER_COLUMN_UNIQUE);//, Pattern.MULTILINE | Pattern.DOTALL);
+    private static final String REGEX_ALTER_COLUMN_UNIQUE = "^ALTER TABLE \\\"(?<o>.*)\\\".\\\"(?<tn>.*)\\\"\\n\\s{4}ADD( CONSTRAINT )?\\\"?(?<name>.*)\\\"? UNIQUE \\(\\s(?<cn>\\\".*\\\")\\s\\)";
+    protected static final Pattern PATTERN_ALTER_COLUMN_UNIQUE = Pattern.compile(REGEX_ALTER_COLUMN_UNIQUE);//, Pattern.MULTILINE | Pattern.DOTALL);
 
-    String REGEX_SEQUENCE = "^CREATE SEQUENCE \\\"(?<owner>.*?)\\\"\\.\\\"(?<n>.*?)\\\"\\sMINVALUE\\s(?<min>\\d+) MAXVALUE (?<max>\\d+) INCREMENT BY (?<step>\\d+) START WITH (?<start>\\d+)";
-    Pattern PATTERN_SEQUENCE = Pattern.compile(REGEX_SEQUENCE);//, Pattern.MULTILINE | Pattern.DOTALL);
+    private static final String REGEX_SEQUENCE = "^CREATE SEQUENCE \\\"(?<owner>.*?)\\\"\\.\\\"(?<n>.*?)\\\"\\sMINVALUE\\s(?<min>\\d+) MAXVALUE (?<max>\\d+) INCREMENT BY (?<step>\\d+) START WITH (?<start>\\d+)";
+    protected static final Pattern PATTERN_SEQUENCE = Pattern.compile(REGEX_SEQUENCE);//, Pattern.MULTILINE | Pattern.DOTALL);
 
     /**
      * <pre>
@@ -70,8 +70,8 @@ public abstract class SqlAnyReloadUnloader implements SqlAnyUnloader {
      * go
      * </pre>
      */
-    String REGEX_LOAD_TABLE = "^LOAD TABLE \\\"(?<owner>.*?)\\\"\\.\\\"(?<tn>.*?)\\\" \\n?\\((?<cols>.*?)\\)\\n?\\s{4}FROM\\s\\'(?<file>.*?)\\'";
-    Pattern PATTERN_LOAD_TABLE = Pattern.compile(REGEX_LOAD_TABLE, Pattern.MULTILINE | Pattern.DOTALL);
+    private static final String REGEX_LOAD_TABLE = "^LOAD TABLE \\\"(?<owner>.*?)\\\"\\.\\\"(?<tn>.*?)\\\" \\n?\\((?<cols>.*?)\\)\\n?\\s{4}FROM\\s\\'(?<file>.*?)\\'";
+    protected static final Pattern PATTERN_LOAD_TABLE = Pattern.compile(REGEX_LOAD_TABLE, Pattern.MULTILINE | Pattern.DOTALL);
 
     /**
      * <pre>
@@ -88,15 +88,15 @@ public abstract class SqlAnyReloadUnloader implements SqlAnyUnloader {
      * go
      * </pre>
      */
-    String REGEX_CREATE_INDEX = "^CREATE (?<u>UNIQUE)?\\s?INDEX \\\"(?<n>.*?)\\\" ON \\\"(?<owner>.*?)\\\"\\.\\\"(?<tn>.*?)\\\"\\n\\s{4}\\((?<cols>.*?)\\)$";
-    Pattern PATTERN_CREATE_INDEX = Pattern.compile(REGEX_CREATE_INDEX, Pattern.MULTILINE | Pattern.DOTALL);
+    private static final String REGEX_CREATE_INDEX = "^CREATE (?<u>UNIQUE)?\\s?INDEX \\\"(?<n>.*?)\\\" ON \\\"(?<owner>.*?)\\\"\\.\\\"(?<tn>.*?)\\\"\\n\\s{4}\\((?<cols>.*?)\\)$";
+    protected static final Pattern PATTERN_CREATE_INDEX = Pattern.compile(REGEX_CREATE_INDEX, Pattern.MULTILINE | Pattern.DOTALL);
     /**
      * COMMENT ON INDEX "dba"."TABLE_NAME"."Idx_NAME" IS
      * 	'Some nice text'
      * go
      */
-    String REGEX_COMMENT_INDEX = "^COMMENT ON INDEX \\\"(?<owner>.*?)\\\"\\.\\\"(?<tn>.*?)\\\".\\\"(?<n>.*?)\\\"\\sIS\\s\\n\\t'(?<comment>.*?)\\'$";
-    Pattern PATTERN_COMMENT_INDEX = Pattern.compile(REGEX_COMMENT_INDEX, Pattern.MULTILINE | Pattern.DOTALL);
+    private static final String REGEX_COMMENT_INDEX = "^COMMENT ON INDEX \\\"(?<owner>.*?)\\\"\\.\\\"(?<tn>.*?)\\\".\\\"(?<n>.*?)\\\"\\sIS\\s\\n\\t'(?<comment>.*?)\\'$";
+    protected static final Pattern PATTERN_COMMENT_INDEX = Pattern.compile(REGEX_COMMENT_INDEX, Pattern.MULTILINE | Pattern.DOTALL);
 
     /**
      * ALTER TABLE "dba"."Table_Name"
@@ -118,8 +118,8 @@ public abstract class SqlAnyReloadUnloader implements SqlAnyUnloader {
      * go
      * </pre>
      */
-    String REGEX_RESET_IDENTITY = "^call dbo.sa_reset_identity\\('(?<tn>.*?)', '(?<owner>.*?)', (?<nv>\\d*?)\\);";
-    Pattern PATTERN_RESET_IDENTITY = Pattern.compile(REGEX_RESET_IDENTITY);
+    private static final String REGEX_RESET_IDENTITY = "^call dbo.sa_reset_identity\\('(?<tn>.*?)', '(?<owner>.*?)', (?<nv>\\d*?)\\);";
+    protected static final Pattern PATTERN_RESET_IDENTITY = Pattern.compile(REGEX_RESET_IDENTITY);
 
     @NotNull
     protected DbForeignKey.RefAction mapFkAction(@Nullable String action) {
